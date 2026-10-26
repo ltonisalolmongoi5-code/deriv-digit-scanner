@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deriv Digit Scanner</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f2f5f9;padding:16px;color:#172033}
+main{max-width:600px;margin:auto}
+.card{background:white;padding:16px;margin:12px 0;border-radius:12px}
+button,select{padding:12px;font-size:16px;margin:5px 0}
+button{background:#087b53;color:white;border:0;border-radius:8px}
+.digits{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.digit{background:#e8f2ed;padding:10px 2px;text-align:center;border-radius:6px}
+</style>
+</head>
+<body>
+<main>
+<h2>Deriv Matches/Differs Scanner</h2>
+<p>Free public market analysis only. No automatic trades.</p>
+<div class="card">
+<label for="market">Choose market:</label>
+<select id="market">
+<option value="R_10">Volatility 10</option>
+<option value="R_25">Volatility 25</option>
+<option value="R_50">Volatility 50</option>
+<option value="R_75">Volatility 75</option>
+<option value="R_100">Volatility 100</option>
+</select>
+<p><button id="start">Start scanner</button>
+<button id="stop">Stop</button></p>
+<p id="status">Stopped</p>
+<p>Latest price: <b id="price">—</b></p>
+<p>Last digit: <b id="last">—</b></p>
+<p>Ticks collected: <b id="total">0</b>/100</p>
+</div>
+<div class="card">
+<h3>Recent last-digit frequency</h3>
+<div class="digits" id="digits"></div>
+<p id="guide">Waiting for market data.</p>
+</div>
+<p><small>Past frequency does not predict the next digit or guarantee profit.</small></p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const counts=Array(10).fill(0);
+let history=[],ws=null,active=false;
+for(let i=0;i<10;i++){
+ const el=document.createElement('div');
+ el.className='digit';el.id='d'+i;
+ $('digits').appendChild(el);
+}
+function draw(){
+ for(let i=0;i<10;i++){
+  const n=history.filter(x=>x===i).length;
+  $('d'+i).innerHTML='<b>'+i+'</b><br>'+n+'<br>'+(history.length?(100*n/history.length).toFixed(1):'0')+'%';
+ }
+ $('total').textContent=history.length;
+}
+function stop(){
+ active=false;
+ if(ws)ws.close();
+ ws=null;$('status').textContent='Stopped';
+}
+$('start').onclick=()=>{
+ stop();history=[];draw();active=true;
+ $('status').textContent='Connecting…';
+ ws=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+ ws.onopen=()=>{
+  if(active)ws.send(JSON.stringify({ticks:$('market').value,subscribe:1}));
+ };
+ ws.onmessage=e=>{
+  const d=JSON.parse(e.data);
+  if(d.error){$('status').textContent=d.error.message;return;}
+  if(d.msg_type==='tick'){
+   const p=Number(d.tick.quote);
+   const decimals=Number(d.tick.pip_size)||2;
+   const formatted=p.toFixed(decimals);
+   const digit=Number(formatted.slice(-1));
+   $('price').textContent=formatted;
+   $('last').textContent=digit;
+   history.push(digit);
+   if(history.length>100)history.shift();
+   $('status').textContent='Connected';
+   $('guide').textContent='Frequency summary only — not a prediction.';
+   draw();
+  }
+ };
+ ws.onerror=()=>{$('status').textContent='Connection error';};
+ ws.onclose=()=>{if(active)$('status').textContent='Disconnected';};
+};
+$('stop').onclick=stop;
+</script>
+</body>
+                        </html>
+                        
